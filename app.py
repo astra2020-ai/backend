@@ -1,15 +1,21 @@
 from datetime import datetime, timezone, timedelta
+from flask import render_template
 from flask import Flask, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from functools import wraps
-import random
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:cyberfox@localhost/casino'
+
+# Update the MySQL database URI with your PythonAnywhere MySQL credentials
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://Astra2020:cyberfox@Astra2020.mysql.pythonanywhere-services.com/Astra2020$casino'
 app.config['SECRET_KEY'] = '0c06f185e52811ab2c087a05391131b3'
+
+# Update the SQLALCHEMY_TRACK_MODIFICATIONS setting to suppress a warning
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 CORS(app)
 
@@ -55,100 +61,10 @@ def format_user(user):
 with app.app_context():
     db.create_all()
 
-games = ['BAR', 'APPLE', 'ORANGE', 'MALON', 'BELL', 'STAR', '777', 'MANGO', 'BONUS']
-values = [100, 50, 20, 10, 5, 3]
-bonus = [10, 5, 3]
-bonus_weight = [5, 20, 75]
-single_bonus = [20, 10]
-sigle_weight = [5, 95]
-decide = ['2', '3']
-decide_weight = [70, 30]
-account = 0
-Bonus = False
-
-@app.route('/add_money', methods=['POST'])
-def add_money():
-    global account
-    data = request.json
-    added = data.get('amount', 0)
-    account += int(added)
-
-    return jsonify({'message': 'Transaction successful', 'balance': account})
-
-@app.route('/balance', methods=['GET'])
-def get_balance():
-    return jsonify({'balance': account})
-
-@app.route('/spin', methods=['POST'])
-def spin():
-    global account
-    data = request.json
-    bet = data.get('bet', [])
-
-    results = []
-
-    def spin_logic():
-        global account
-        gam = random.choices(games, weights=[1, 13, 13, 13, 13, 13, 13, 13, 8], k=1)
-        wins = set(gam) & set(bet)
-
-        if len(list(wins)) >= 1 or 'BONUS' in gam:
-            if 'BONUS' in gam:
-                bonus_results = []
-                one_or_two = random.choices(decide, weights=decide_weight, k=1)
-                if '2' in one_or_two:
-                    gas = random.choices(games, weights=[0, 15, 15, 14, 14, 14, 14, 14, 0], k=3)
-                    vas = random.choices(bonus, weights=bonus_weight, k=3)
-                    bonus_results = [(x, int(num) * 500) for x, num in zip(gas, vas)]
-                else:
-                    gas = random.choices(games, weights=[0, 15, 15, 14, 14, 14, 14, 14, 0], k=2)
-                    vas = random.choices(single_bonus, weights=sigle_weight, k=2)
-                    bonus_results = [(x, int(num) * 500) for x, num in zip(gas, vas)]
-
-                # Check if the bonus bets are correct before adding to results
-                bonus_wins = set([bonus_bet for bonus_bet in bonus_results if bonus_bet[0] in bet])
-                if bonus_wins:
-                    earned_amount = sum([int(num) for _, num in bonus_wins])
-                    account += earned_amount
-                    # Include detailed information in results
-                    results.extend([('bonus', {'objects': list(bonus_wins), 'earned_amount': earned_amount, 'total_balance': account})])
-                else:
-                    results.extend([('regular', {'objects': list(wins), 'earned_amount': 0, 'total_balance': account})])
-            else:
-                if "BAR" in gam:
-                    bon = [100, 50]
-                    val = random.choices(bon, weights=[5, 95], k=1)
-                    res = int(val) * 500
-                    account += int(res)
-                    results.append(('regular', {'objects': list(wins), 'earned_amount': res, 'total_balance': account}))
-                else:
-                    val = random.choices(values, weights=[0, 0.5, 5, 10.5, 25, 60])[0]
-                    res = int(val) * 500
-                    account += int(res)
-                    # Include detailed information in results
-                    results.append(('regular', {'objects': list(wins), 'earned_amount': res, 'total_balance': account}))
-        else:
-            results.append(('regular', {'objects': gam, 'earned_amount': 0, 'total_balance': account}))
-
-    if account >= 500:
-        stake = len(bet) * 500
-        if account >= stake:
-            account -= stake
-
-            # Regular spin
-            spin_logic()
-
-            # Bonus spin (if applicable)
-            if results and results[-1][0] == 'bonus':
-                spin_logic()
-
-        else:
-            return jsonify({'message': 'Bet is more than stake', 'results': results}), 400
-    else:
-        return jsonify({'message': 'Deposit money to your account', 'results': results}), 400
-
-    return jsonify({'results': results})
-
+# Add a route for the homepage
+@app.route('/')
+def homepage():
+    return render_template('index.html')
 
 # Registration endpoint
 @app.route('/register', methods=['POST'])
@@ -187,7 +103,7 @@ def login():
     if user and check_password_hash(user.password_hash, data['password']):
         # Adjust the expiration
         exp_time = datetime.now(timezone(timedelta(hours=3))) + timedelta(days=1)
-        
+
         token = jwt.encode({
             'user_id': user.id,
             'exp': exp_time
@@ -218,6 +134,3 @@ def token_required(f):
 @token_required
 def protected(current_user):
     return jsonify({'message': f'Hello, {current_user.firstname}!'})
-
-if __name__ == '__main__':
-    app.run(debug=True)
